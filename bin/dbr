@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+DBR_JAR_PATH=${DBR_JAR_PATH:-"$PROJECT_DIR/cli/target/database-radar.jar"}
+
+if [ ! -f "$DBR_JAR_PATH" ]; then
+  printf '%s\n' "Database Radar JAR not found: $DBR_JAR_PATH" >&2
+  printf '%s\n' "Build it with: $PROJECT_DIR/mvnw clean package" >&2
+  exit 2
+fi
+
+exec java -jar "$DBR_JAR_PATH" "$@"
