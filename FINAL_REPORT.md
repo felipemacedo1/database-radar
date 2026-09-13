@@ -7,9 +7,12 @@ independent, offline Java 21 CLI that analyzes Java 8+ source without compiling,
 executing, or classloading the target repository. It uses neither an LLM nor a
 paid/runtime API.
 
-This report describes commit-ready behavior observed locally. It does not claim
-that hosted CI ran; the workflow is a reproducible recipe and account billing
-may prevent GitHub-hosted execution.
+This report describes behavior observed locally. The hosted
+[CI run 34734698989](https://github.com/felipemacedo1/database-radar/actions/runs/34734698989)
+created for commit `d226447` did not execute any workflow steps: GitHub marked
+the job failed because the account was locked over a billing issue. This is not
+test evidence and is not treated as a product failure; the workflow remains a
+reproducible recipe.
 
 ## Implemented behavior
 
