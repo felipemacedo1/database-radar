@@ -37,7 +37,17 @@ public final class GraphQueries {
             }
             default -> throw new IllegalArgumentException("Target kind must be table or column");
         };
-        return graph.node(id);
+        Optional<GraphNode> exact = graph.node(id);
+        if (exact.isPresent()) {
+            return exact;
+        }
+        NodeKind expectedKind = kind.equalsIgnoreCase("table")
+                ? NodeKind.DATABASE_TABLE
+                : NodeKind.DATABASE_COLUMN;
+        List<GraphNode> caseInsensitive = graph.nodes().stream()
+                .filter(node -> node.kind() == expectedKind && node.id().equalsIgnoreCase(id))
+                .toList();
+        return caseInsensitive.size() == 1 ? Optional.of(caseInsensitive.getFirst()) : Optional.empty();
     }
 
     public List<AccessFinding> accesses(String targetId, boolean writes) {

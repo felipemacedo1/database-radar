@@ -11,8 +11,12 @@ The tool must expose gaps rather than silently guess.
 
 ## Decision
 
-Use JSqlParser 5.3 under its Apache-2.0 option. Extract only explicitly supported
-DML shapes with dedicated visitors/tests. Resolve aliases within statement
+Use JSqlParser 5.3 under its Apache-2.0 option. SQL Server is the primary
+dialect; explicit parser configuration treats square brackets as T-SQL quoted
+identifiers. `auto` selects that mode when brackets are present and otherwise
+uses the common grammar with a bracket-mode fallback. PostgreSQL, MySQL/MariaDB,
+and ANSI-like modes remain available. Extract only explicitly supported DML
+shapes with dedicated visitors/tests. Resolve aliases within statement
 scope. Assign an unqualified column only when its owner is unique. On parse
 failure or dynamic identifier holes, emit UNKNOWN diagnostics and no fabricated
 database edge. Keep the SQL analyzer behind an internal interface so a future
@@ -20,8 +24,10 @@ dialect-specific or schema-aware parser can coexist.
 
 ## Consequences
 
-SELECT/INSERT/UPDATE/DELETE can be proved quickly with a Java-native AST. The
-project owns the correctness matrix and must not claim all upstream dialects.
+SELECT/INSERT/UPDATE/DELETE can be proved quickly with a Java-native AST. T-SQL
+alias write targets such as `UPDATE p ... FROM dbo.PEDIDO p` are normalized to
+the physical table. The project owns the correctness matrix and must not claim
+all upstream dialects.
 Column lineage across CTEs, derived tables, wildcard expansion, procedures, and
 vendor-specific constructs remains limited.
 

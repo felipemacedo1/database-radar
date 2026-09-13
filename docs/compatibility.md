@@ -10,7 +10,8 @@ or Java installed once the tool is running.
 
 Java 8 is the mandatory baseline. The parser has explicit language levels for
 newer Java releases, but Database Radar will claim only versions exercised by
-its fixtures. Initial release testing targets Java 8, 11, 17, and 21 syntax.
+its fixtures. Initial release tests exercise Java 8 lambdas, Java 11 `var`,
+Java 17 records, and Java 21 pattern matching in `switch`.
 Parser capability beyond that is upstream capability, not yet product support.
 
 The target project may have missing imports, private dependencies, or broken
@@ -31,5 +32,8 @@ scanner ignores build output and VCS metadata and never runs build scripts.
 
 ## SQL
 
-See [SQL support](sql-support.md). Compatibility means a committed test fixture
+SQL Server is primary. `--sql-dialect sql-server` enables bracket-delimited
+identifiers explicitly; `auto` selects that mode when brackets occur. The suite
+also retains ANSI-like, PostgreSQL, and MySQL/MariaDB common constructs. See
+[SQL support](sql-support.md). Compatibility means a committed test fixture
 passes; it never means every construct accepted by a database vendor is parsed.

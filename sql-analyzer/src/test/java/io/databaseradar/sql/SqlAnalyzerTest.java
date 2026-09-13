@@ -67,6 +67,47 @@ class SqlAnalyzerTest {
     }
 
     @Test
+    void parsesSqlServerBracketsTopAndNamedVariable() {
+        SqlAnalysis result = new SqlAnalyzer(SqlDialect.SQL_SERVER).analyze("""
+                SELECT TOP (10) p.[ID], p.[STATUS]
+                FROM [dbo].[PEDIDO] p
+                WHERE p.[STATUS] = @status
+                """);
+
+        assertTrue(result.parsed(), result.error());
+        assertTrue(result.tables().contains(new SqlTableAccess("dbo.PEDIDO", AccessMode.READ)));
+        assertTrue(result.columns().contains(new SqlColumnAccess("dbo.PEDIDO", "STATUS", AccessMode.READ)));
+    }
+
+    @Test
+    void resolvesSqlServerUpdateFromAliasToPhysicalTarget() {
+        SqlAnalysis result = new SqlAnalyzer(SqlDialect.SQL_SERVER).analyze("""
+                UPDATE p
+                SET p.[STATUS] = ?
+                FROM [dbo].[PEDIDO] p
+                JOIN [dbo].[CLIENTE] c ON c.[ID] = p.[CLIENTE_ID]
+                WHERE c.[ATIVO] = 1
+                """);
+
+        assertTrue(result.parsed(), result.error());
+        assertTrue(result.tables().contains(new SqlTableAccess("dbo.PEDIDO", AccessMode.WRITE)));
+        assertTrue(result.columns().contains(new SqlColumnAccess("dbo.PEDIDO", "STATUS", AccessMode.WRITE)));
+        assertFalse(result.columns().contains(new SqlColumnAccess("dbo.PEDIDO", "STATUS", AccessMode.READ)));
+        assertTrue(result.tables().contains(new SqlTableAccess("dbo.CLIENTE", AccessMode.READ)));
+    }
+
+    @Test
+    void readsUpdateRightHandSideButNotAssignmentTarget() {
+        SqlAnalysis result = analyzer.analyze(
+                "UPDATE pedido SET status = previous_status WHERE id = ?");
+
+        assertTrue(result.parsed(), result.error());
+        assertTrue(result.columns().contains(new SqlColumnAccess("PEDIDO", "STATUS", AccessMode.WRITE)));
+        assertFalse(result.columns().contains(new SqlColumnAccess("PEDIDO", "STATUS", AccessMode.READ)));
+        assertTrue(result.columns().contains(new SqlColumnAccess("PEDIDO", "PREVIOUS_STATUS", AccessMode.READ)));
+    }
+
+    @Test
     void reportsInvalidSql() {
         SqlAnalysis result = analyzer.analyze("SELECT FROM WHERE");
 

@@ -70,7 +70,7 @@ than required, Spoon no-classpath is the first alternative to benchmark.
 
 | Candidate | Strength | Limitation for this product | License | Decision |
 | --- | --- | --- | --- | --- |
-| JSqlParser 5.3 | Java-native DML AST and visitors; handles bind parameters, nested selects, aliases, joins, and multiple statement kinds | Parsing is syntactic; column-to-table ownership can remain ambiguous without schema; dialect coverage is not proof of correctness | Apache-2.0 or LGPL-2.1 | **Chosen for spike under Apache-2.0 terms** |
+| JSqlParser 5.3 | Java-native DML AST and visitors; handles bind parameters, nested selects, aliases, joins, multiple statement kinds, and an explicit SQL Server bracket-quotation mode | Parsing is syntactic; column-to-table ownership can remain ambiguous without schema; dialect coverage is not proof of correctness | Apache-2.0 or LGPL-2.1 | **Chosen for spike under Apache-2.0 terms** |
 | Apache Calcite | Standalone parser/object model plus validator and extensible operators | Full validation/lineage benefits from schema and Calcite is a much larger dependency; default grammar is its own SQL dialect | Apache-2.0 | Keep as future evaluator for schema-aware analysis |
 | jOOQ parser | Broad parser API and dialect configuration | Larger SQL DSL dependency and open/commercial edition boundaries add unnecessary product/licensing surface | Apache-2.0 for OSS edition plus commercial editions | Not selected |
 | FoundationDB SQL Parser | Java parser, Apache-2.0 | Last published artifacts and repository activity are too old for the primary parser of a new tool | Apache-2.0 | Rejected |
@@ -78,12 +78,21 @@ than required, Spoon no-classpath is the first alternative to benchmark.
 Primary evidence:
 
 - [JSqlParser grammar, Java runtime matrix, visitors, benchmark, and license](https://github.com/JSQLParser/JSqlParser)
+- [JSqlParser SQL Server bracket-quotation configuration](https://github.com/JSQLParser/JSqlParser/blob/master/src/main/java/net/sf/jsqlparser/parser/CCJSqlParserUtil.java)
 - [Apache Calcite standalone SQL parser model](https://calcite.apache.org/javadocAggregate/org/apache/calcite/sql/package-summary.html)
 - [Calcite default SQL grammar](https://calcite.apache.org/docs/reference.html)
 - [jOOQ parser API](https://www.jooq.org/doc/latest/manual/sql-building/sql-parser/sql-parser-api/)
 - [FoundationDB parser artifact metadata](https://central.sonatype.com/artifact/com.foundationdb/fdb-sql-parser)
 
 ### SQL strategy risk to prove
+
+Microsoft SQL Server is the primary production dialect, clarified during the
+MVP. The test matrix therefore leads with bracketed identifiers, `TOP`, named
+`@variables`, and `UPDATE ... FROM`, while retaining PostgreSQL, MySQL/MariaDB,
+and ANSI-like common SQL as configured modes. Microsoft documents brackets and
+double quotes as delimited identifiers and `TOP` in the SELECT grammar.
+[SQL Server identifiers](https://learn.microsoft.com/en-us/sql/relational-databases/databases/database-identifiers?preserve-view=true&version=fabric&view=sql-server-ver16),
+[SQL Server SELECT clause](https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql?view=sql-server-ver17)
 
 The AST does not supply a database catalog. The MVP may state that
 `p.STATUS` belongs to `PEDIDO p` when an alias scope is syntactically unique,
@@ -130,6 +139,7 @@ keywords.
 ## Outcome
 
 Proceed with a Java 21 Maven application that analyzes Java 8+ source using
-JavaParser 3.28.2 and parses the documented SQL subset using JSqlParser 5.3.
+JavaParser 3.28.2 and parses the documented SQL Server-first, multi-dialect
+subset using JSqlParser 5.3.
 The first implementation must prove one Java 8 JDBC SELECT from source range to
 queryable graph before modules or feature breadth are added.

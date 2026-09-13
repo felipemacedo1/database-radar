@@ -35,21 +35,27 @@ the vertical proof passes.
 ## Scan pipeline
 
 1. Normalize and validate the requested root.
-2. Discover conventional Java/resource roots plus explicit additional paths;
+2. Select the configured SQL parser mode (`auto`, SQL Server, PostgreSQL,
+   MySQL/MariaDB, or ANSI-like); SQL Server bracket quoting is explicit.
+3. Discover conventional Java/resource roots plus explicit additional paths;
    skip `.git`, `target`, `build`, `.gradle`, `.idea`, and Radar output.
-3. Parse each Java file syntactically and emit declarations/findings even when
+4. Parse each Java file syntactically and emit declarations/findings even when
    later semantic enrichment fails.
-4. Evaluate supported string expressions and associate SQL candidates with the
+5. Evaluate supported string expressions and associate SQL candidates with the
    smallest enclosing Java method/field.
-5. Parse resolved SQL candidates; on failure, emit diagnostic evidence without
+6. Parse resolved SQL candidates; on failure, emit diagnostic evidence without
    structural table/column claims.
-6. Inspect basic JPA annotations directly from syntax.
-7. Attempt direct source-call resolution; downgrade unresolved candidates.
-8. Parse standalone `.sql` resources and connect literal resource loads where
+7. Inspect basic JPA annotations directly from syntax.
+8. Attempt direct source-call resolution; downgrade unresolved candidates.
+9. Parse standalone `.sql` resources and connect literal resource loads where
    supported.
-9. Deduplicate nodes/edges by canonical content key while retaining distinct
+10. Deduplicate nodes/edges by canonical content key while retaining distinct
    evidence records.
-10. Write `.database-radar/graph.json` atomically and print scan diagnostics.
+11. Write `.database-radar/graph.json` atomically and print scan diagnostics.
+
+Build files are never executed or used to resolve dependencies in v1. Source
+discovery is based on the configured root, recursive file discovery, and any
+explicit `--source-root` values.
 
 ## Failure isolation
 
@@ -62,8 +68,8 @@ erase syntax-derived evidence.
 
 - Files are read as bytes/text only under configured roots.
 - Symlink traversal is disabled by default.
-- Build files are inspected only for optional source-root hints; scripts are
-  never executed.
+- Build files and repository scripts are never executed; v1 does not use them
+  for dependency resolution.
 - No network client exists in the runtime dependency graph.
 - Resource and output paths are normalized to prevent writes outside the chosen
   output location.
@@ -72,6 +78,7 @@ erase syntax-derived evidence.
 ## Performance shape
 
 The baseline is a streaming file walk and per-file AST lifetime. Graph records
-are compact values held in memory. Symbol enrichment can be disabled and timed
-separately. The benchmark records wall time, Java files/second, approximate
-peak heap, SQL parse time, and serialized graph size. No cache is part of v1.
+are compact values held in memory. Symbol enrichment can be disabled with
+`--no-symbol-resolution` and timed separately. The benchmark records wall time,
+Java files/second, approximate peak heap, accumulated symbol-resolution and SQL
+parse time, and serialized graph size. No cache is part of v1.

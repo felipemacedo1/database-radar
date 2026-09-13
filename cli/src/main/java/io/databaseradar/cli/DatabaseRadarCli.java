@@ -10,6 +10,7 @@ import io.databaseradar.java.ScanOptions;
 import io.databaseradar.report.GraphJson;
 import io.databaseradar.report.GraphQueries;
 import io.databaseradar.report.HumanReport;
+import io.databaseradar.sql.SqlDialect;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -73,12 +74,19 @@ public final class DatabaseRadarCli implements Runnable {
         @Option(names = "--source-root", description = "Additional source/resource root", arity = "1")
         List<Path> additionalRoots = new ArrayList<>();
 
+        @Option(names = "--sql-dialect", description = "auto, sql-server, postgresql, mysql, or ansi (default: ${DEFAULT-VALUE})")
+        String sqlDialect = "auto";
+
+        @Option(names = "--no-symbol-resolution", description = "Skip Java symbol solving; keep syntactic call inference")
+        boolean noSymbolResolution;
+
         @Option(names = "--json", description = "Also print the complete graph JSON")
         boolean json;
 
         @Override
         public Integer call() throws Exception {
-            ScanOptions options = new ScanOptions(root, javaVersion, additionalRoots);
+            ScanOptions options = new ScanOptions(root, javaVersion, additionalRoots,
+                    SqlDialect.fromCli(sqlDialect), !noSymbolResolution);
             var scan = new ProjectScanner().scan(options);
             GraphDocument document = new GraphDocument(
                     "1.0", "0.1.0-SNAPSHOT", scan.scannedRoot(), Instant.now().toString(),

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/felipemacedo1/database-radar/blob/main/docs/graph-schema-v1.json",
+  "title": "Database Radar evidence graph v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "toolVersion", "scannedRoot", "createdAt", "summary", "nodes", "edges", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "type": "string", "pattern": "^1\\." },
+    "toolVersion": { "type": "string" },
+    "scannedRoot": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+  },
+  "$defs": {
+    "confidence": { "enum": ["HIGH", "MEDIUM", "LOW", "UNKNOWN"] },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "range": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/position" },
+        "end": { "oneOf": [{ "$ref": "#/$defs/position" }, { "type": "null" }] }
+      }
+    },
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "label", "attributes"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["SOURCE_FILE", "JAVA_TYPE", "JAVA_METHOD", "JAVA_FIELD", "ENTITY", "SQL_STATEMENT", "DATABASE_TABLE", "DATABASE_COLUMN", "RESOURCE_FILE"] },
+        "label": { "type": "string" },
+        "attributes": { "$ref": "#/$defs/stringMap" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "range", "analyzer", "kind", "confidence", "details"],
+      "properties": {
+        "file": { "type": "string" },
+        "range": { "$ref": "#/$defs/range" },
+        "analyzer": { "type": "string" },
+        "kind": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "details": { "$ref": "#/$defs/stringMap" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "edge", "to", "confidence", "evidence"],
+      "properties": {
+        "from": { "type": "string" },
+        "edge": { "enum": ["DECLARES", "CALLS", "CONTAINS_SQL", "READS_TABLE", "WRITES_TABLE", "READS_COLUMN", "WRITES_COLUMN", "MAPS_TO_TABLE", "MAPS_TO_COLUMN", "LOADS_RESOURCE", "POSSIBLY_CALLS"] },
+        "to": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidence" } }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "file", "range", "message", "confidence"],
+      "properties": {
+        "category": { "type": "string" },
+        "file": { "type": "string" },
+        "range": { "$ref": "#/$defs/range" },
+        "message": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["javaFiles", "parsedJavaFiles", "javaParseFailures", "resolvedCalls", "unresolvedCalls", "sqlCandidates", "parsedSql", "partialSql", "databaseTables", "databaseColumns", "highConfidenceEdges", "mediumConfidenceEdges", "lowConfidenceEdges", "unknownFindings", "durationMillis", "symbolResolutionMillis", "sqlParsingMillis", "approximatePeakHeapBytes"],
+      "properties": {
+        "javaFiles": { "$ref": "#/$defs/count" },
+        "parsedJavaFiles": { "$ref": "#/$defs/count" },
+        "javaParseFailures": { "$ref": "#/$defs/count" },
+        "resolvedCalls": { "$ref": "#/$defs/count" },
+        "unresolvedCalls": { "$ref": "#/$defs/count" },
+        "sqlCandidates": { "$ref": "#/$defs/count" },
+        "parsedSql": { "$ref": "#/$defs/count" },
+        "partialSql": { "$ref": "#/$defs/count" },
+        "databaseTables": { "$ref": "#/$defs/count" },
+        "databaseColumns": { "$ref": "#/$defs/count" },
+        "highConfidenceEdges": { "$ref": "#/$defs/count" },
+        "mediumConfidenceEdges": { "$ref": "#/$defs/count" },
+        "lowConfidenceEdges": { "$ref": "#/$defs/count" },
+        "unknownFindings": { "$ref": "#/$defs/count" },
+        "durationMillis": { "$ref": "#/$defs/count" },
+        "symbolResolutionMillis": { "$ref": "#/$defs/count" },
+        "sqlParsingMillis": { "$ref": "#/$defs/count" },
+        "approximatePeakHeapBytes": { "$ref": "#/$defs/count" }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 }
+  }
+}

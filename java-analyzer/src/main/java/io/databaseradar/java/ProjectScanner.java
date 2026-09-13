@@ -35,6 +35,7 @@ import io.databaseradar.graph.SourcePosition;
 import io.databaseradar.graph.SourceRange;
 import io.databaseradar.persistence.JpaAnalyzer;
 import io.databaseradar.sql.SqlGraphProjector;
+import io.databaseradar.sql.SqlAnalyzer;
 import io.databaseradar.sql.SqlOrigin;
 
 import java.io.IOException;
@@ -64,7 +65,6 @@ public final class ProjectScanner {
             "prepareStatement", "prepareCall", "executeQuery", "executeUpdate", "execute", "addBatch");
 
     private final JpaAnalyzer jpaAnalyzer = new JpaAnalyzer();
-    private final SqlGraphProjector sqlProjector = new SqlGraphProjector();
     private final StringExpressionEvaluator stringEvaluator = new StringExpressionEvaluator();
 
     public ScanResult scan(ScanOptions options) throws IOException {
@@ -77,6 +77,7 @@ public final class ProjectScanner {
         List<Path> javaFiles = files.stream().filter(path -> path.toString().endsWith(".java")).toList();
         List<Path> sqlFiles = files.stream().filter(path -> path.toString().endsWith(".sql")).toList();
         JavaParser parser = parser(options, javaFiles);
+        SqlGraphProjector sqlProjector = new SqlGraphProjector(new SqlAnalyzer(options.sqlDialect()));
         GraphBuilder graph = new GraphBuilder();
         List<Diagnostic> diagnostics = new ArrayList<>();
         MutableMetrics metrics = new MutableMetrics(javaFiles.size());
@@ -107,7 +108,8 @@ public final class ProjectScanner {
                     metrics.parsedJavaFiles++;
                 }
                 analyzeCompilationUnit(unit, relative, fileId, graph, diagnostics, metrics,
-                        methods, pendingCalls, pendingResourceLoads, projectedCandidates);
+                        methods, pendingCalls, pendingResourceLoads, projectedCandidates, sqlProjector,
+                        options.symbolResolution());
             } catch (RuntimeException exception) {
                 metrics.javaParseFailures++;
                 diagnostics.add(new Diagnostic("JAVA_ANALYSIS_FAILURE", relative, null,
@@ -118,7 +120,7 @@ public final class ProjectScanner {
 
         linkCalls(graph, diagnostics, metrics, methods, pendingCalls);
         linkResources(options.root(), sqlFiles, graph, diagnostics, pendingResourceLoads);
-        analyzeSqlResources(options.root(), sqlFiles, graph, diagnostics, metrics);
+        analyzeSqlResources(options.root(), sqlFiles, graph, diagnostics, metrics, sqlProjector);
         EvidenceGraph built = graph.build();
         metrics.finish(built, diagnostics, Duration.between(started, Instant.now()).toMillis());
         diagnostics.sort(Comparator.comparing(Diagnostic::file)
@@ -137,7 +139,9 @@ public final class ProjectScanner {
             MethodIndex methods,
             List<PendingCall> pendingCalls,
             List<PendingResourceLoad> pendingResourceLoads,
-            Set<String> projectedCandidates) {
+            Set<String> projectedCandidates,
+            SqlGraphProjector sqlProjector,
+            boolean symbolResolution) {
         Map<Node, String> ownerIds = new HashMap<>();
         Map<String, String> variableTypes = collectVariableTypes(unit);
 
@@ -186,7 +190,7 @@ public final class ProjectScanner {
                 String ownerId = ownerId(variable, ownerIds);
                 if (ownerId != null) {
                     projectExpression(initializer, ownerId, file, "JAVA_SQL_EXPRESSION", bindings,
-                            graph, diagnostics, metrics, projectedCandidates);
+                            graph, diagnostics, metrics, projectedCandidates, sqlProjector);
                 }
             });
         }
@@ -202,7 +206,7 @@ public final class ProjectScanner {
             }
             if (SQL_CALLS.contains(call.getNameAsString()) && !call.getArguments().isEmpty()) {
                 projectExpression(call.getArgument(0), callerId, file, jdbcKind(call), bindings,
-                        graph, diagnostics, metrics, projectedCandidates);
+                        graph, diagnostics, metrics, projectedCandidates, sqlProjector);
             }
             if ((call.getNameAsString().equals("getResource")
                     || call.getNameAsString().equals("getResourceAsStream"))
@@ -216,7 +220,8 @@ public final class ProjectScanner {
                         range(call.getArgument(0))));
             }
             pendingCalls.add(pendingCall(call, callerId, qualifiedName(unit,
-                    caller.findAncestor(TypeDeclaration.class).orElseThrow()), file, variableTypes));
+                    caller.findAncestor(TypeDeclaration.class).orElseThrow()), file, variableTypes,
+                    symbolResolution, metrics));
         }
     }
 
@@ -229,7 +234,8 @@ public final class ProjectScanner {
             GraphBuilder graph,
             List<Diagnostic> diagnostics,
             MutableMetrics metrics,
-            Set<String> projectedCandidates) {
+            Set<String> projectedCandidates,
+            SqlGraphProjector sqlProjector) {
         StringExpressionEvaluator.Evaluation evaluation = stringEvaluator.evaluate(expression, bindings);
         if (!looksLikeSql(evaluation.text())) {
             return;
@@ -249,11 +255,17 @@ public final class ProjectScanner {
                     Confidence.UNKNOWN));
             return;
         }
-        SqlGraphProjector.ProjectionResult result = sqlProjector.project(
-                evaluation.text(),
-                new SqlOrigin(ownerId, file, range(expression), kind, evaluation.confidence()),
-                graph,
-                diagnostics);
+        long sqlStarted = System.nanoTime();
+        SqlGraphProjector.ProjectionResult result;
+        try {
+            result = sqlProjector.project(
+                    evaluation.text(),
+                    new SqlOrigin(ownerId, file, range(expression), kind, evaluation.confidence()),
+                    graph,
+                    diagnostics);
+        } finally {
+            metrics.sqlParsingNanos += System.nanoTime() - sqlStarted;
+        }
         if (result.parsed()) {
             metrics.parsedSql++;
         }
@@ -267,7 +279,8 @@ public final class ProjectScanner {
             List<Path> sqlFiles,
             GraphBuilder graph,
             List<Diagnostic> diagnostics,
-            MutableMetrics metrics) throws IOException {
+            MutableMetrics metrics,
+            SqlGraphProjector sqlProjector) throws IOException {
         for (Path file : sqlFiles) {
             String relative = displayPath(root, file);
             String resourceId = CanonicalIds.resource(relative);
@@ -281,9 +294,15 @@ public final class ProjectScanner {
                 SourceRange range = new SourceRange(
                         new SourcePosition(fragment.line(), 1),
                         new SourcePosition(fragment.line(), 1));
-                var result = sqlProjector.project(fragment.sql(),
-                        new SqlOrigin(resourceId, relative, range, "SQL_RESOURCE", Confidence.HIGH),
-                        graph, diagnostics);
+                long sqlStarted = System.nanoTime();
+                SqlGraphProjector.ProjectionResult result;
+                try {
+                    result = sqlProjector.project(fragment.sql(),
+                            new SqlOrigin(resourceId, relative, range, "SQL_RESOURCE", Confidence.HIGH),
+                            graph, diagnostics);
+                } finally {
+                    metrics.sqlParsingNanos += System.nanoTime() - sqlStarted;
+                }
                 if (result.parsed()) {
                     metrics.parsedSql++;
                 }
@@ -336,19 +355,26 @@ public final class ProjectScanner {
             String callerId,
             String callerType,
             String file,
-            Map<String, String> variableTypes) {
+            Map<String, String> variableTypes,
+            boolean resolveSymbols,
+            MutableMetrics metrics) {
         String resolvedOwner = null;
         List<String> resolvedParameters = List.of();
-        try {
-            ResolvedMethodDeclaration resolved = call.resolve();
-            resolvedOwner = resolved.declaringType().getQualifiedName();
-            List<String> parameters = new ArrayList<>();
-            for (int index = 0; index < resolved.getNumberOfParams(); index++) {
-                parameters.add(simpleType(resolved.getParam(index).describeType()));
+        if (resolveSymbols) {
+            long resolutionStarted = System.nanoTime();
+            try {
+                ResolvedMethodDeclaration resolved = call.resolve();
+                resolvedOwner = resolved.declaringType().getQualifiedName();
+                List<String> parameters = new ArrayList<>();
+                for (int index = 0; index < resolved.getNumberOfParams(); index++) {
+                    parameters.add(simpleType(resolved.getParam(index).describeType()));
+                }
+                resolvedParameters = List.copyOf(parameters);
+            } catch (RuntimeException ignored) {
+                // Resolution is optional; the syntactic fallback is intentionally conservative.
+            } finally {
+                metrics.symbolResolutionNanos += System.nanoTime() - resolutionStarted;
             }
-            resolvedParameters = List.copyOf(parameters);
-        } catch (RuntimeException ignored) {
-            // Resolution is optional; the syntactic fallback is intentionally conservative.
         }
         String receiverType = call.getScope()
                 .filter(NameExpr.class::isInstance)
@@ -449,12 +475,14 @@ public final class ProjectScanner {
     }
 
     private static JavaParser parser(ScanOptions options, List<Path> javaFiles) {
-        CombinedTypeSolver solvers = new CombinedTypeSolver();
-        solvers.add(new ReflectionTypeSolver(false));
-        javaSourceRoots(options.root(), javaFiles).forEach(root -> solvers.add(new JavaParserTypeSolver(root)));
         ParserConfiguration configuration = new ParserConfiguration()
-                .setLanguageLevel(languageLevel(options.javaVersion()))
-                .setSymbolResolver(new JavaSymbolSolver(solvers));
+                .setLanguageLevel(languageLevel(options.javaVersion()));
+        if (options.symbolResolution()) {
+            CombinedTypeSolver solvers = new CombinedTypeSolver();
+            solvers.add(new ReflectionTypeSolver(false));
+            javaSourceRoots(options.root(), javaFiles).forEach(root -> solvers.add(new JavaParserTypeSolver(root)));
+            configuration.setSymbolResolver(new JavaSymbolSolver(solvers));
+        }
         return new JavaParser(configuration);
     }
 
@@ -727,6 +755,8 @@ public final class ProjectScanner {
         private int lowEdges;
         private int unknownFindings;
         private long durationMillis;
+        private long symbolResolutionNanos;
+        private long sqlParsingNanos;
         private long peakHeap;
 
         private MutableMetrics(int javaFiles) {
@@ -760,7 +790,8 @@ public final class ProjectScanner {
         private ScanSummary summary() {
             return new ScanSummary(javaFiles, parsedJavaFiles, javaParseFailures, resolvedCalls, unresolvedCalls,
                     sqlCandidates, parsedSql, partialSql, tables, columns, highEdges, mediumEdges, lowEdges,
-                    unknownFindings, durationMillis, peakHeap);
+                    unknownFindings, durationMillis, Duration.ofNanos(symbolResolutionNanos).toMillis(),
+                    Duration.ofNanos(sqlParsingNanos).toMillis(), peakHeap);
         }
     }
 }

@@ -16,5 +16,7 @@ public record ScanSummary(
         int lowConfidenceEdges,
         int unknownFindings,
         long durationMillis,
+        long symbolResolutionMillis,
+        long sqlParsingMillis,
         long approximatePeakHeapBytes) {
 }

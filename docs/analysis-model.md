@@ -15,9 +15,10 @@ Node IDs are UTF-8 strings with a stable kind prefix:
 - `column:<NORMALIZED_TABLE>.<NORMALIZED_COLUMN>`
 
 Unquoted database identifiers are normalized to upper case for query matching.
-Quoted identifiers preserve exact case and include a `quoted` attribute. The
-original spelling remains in node attributes and evidence details. No catalog
-or schema is invented.
+Quoted identifier delimiters are removed and their inner case is preserved in
+the canonical ID. The original SQL remains available through the SQL statement
+node and its source evidence. Schema/catalog components are kept only when they
+occur in source; none are invented.
 
 Node kinds in schema v1 are `SOURCE_FILE`, `RESOURCE_FILE`, `JAVA_TYPE`,
 `JAVA_METHOD`, `JAVA_FIELD`, `ENTITY`, `SQL_STATEMENT`, `DATABASE_TABLE`, and

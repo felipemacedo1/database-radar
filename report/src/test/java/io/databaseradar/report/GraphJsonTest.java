@@ -21,7 +21,7 @@ class GraphJsonTest {
     @Test
     void writesStableSchemaAndReadsItBack() throws Exception {
         ScanSummary summary = new ScanSummary(1, 1, 0, 0, 0, 1, 1, 0,
-                1, 0, 1, 0, 0, 0, 10, 1024);
+                1, 0, 1, 0, 0, 0, 10, 4, 2, 1024);
         GraphDocument document = new GraphDocument("1.0", "test", "/repo", "fixed",
                 summary,
                 List.of(new GraphNode("table:PEDIDO", NodeKind.DATABASE_TABLE, "PEDIDO", Map.of())),

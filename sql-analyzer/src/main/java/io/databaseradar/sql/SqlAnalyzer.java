@@ -15,6 +15,8 @@ import net.sf.jsqlparser.util.TablesNamesFinder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,12 +28,36 @@ import static io.databaseradar.graph.CanonicalIds.normalizePart;
 import static io.databaseradar.graph.CanonicalIds.normalizeQualifiedName;
 
 public final class SqlAnalyzer {
+    private final SqlDialect dialect;
+
+    public SqlAnalyzer() {
+        this(SqlDialect.AUTO);
+    }
+
+    public SqlAnalyzer(SqlDialect dialect) {
+        this.dialect = dialect;
+    }
+
     public SqlAnalysis analyze(String sql) {
         try {
-            return analyzeStatement(CCJSqlParserUtil.parse(sql));
+            return analyzeStatement(parse(sql));
         } catch (JSQLParserException | RuntimeException exception) {
             return new SqlAnalysis(false, SqlOperation.UNSUPPORTED, List.of(), List.of(), List.of(),
                     boundedMessage(exception));
+        }
+    }
+
+    private Statement parse(String sql) throws JSQLParserException {
+        if (dialect == SqlDialect.SQL_SERVER || (dialect == SqlDialect.AUTO && sql.indexOf('[') >= 0)) {
+            return CCJSqlParserUtil.parse(sql, parser -> parser.withSquareBracketQuotation(true));
+        }
+        try {
+            return CCJSqlParserUtil.parse(sql);
+        } catch (JSQLParserException first) {
+            if (dialect != SqlDialect.AUTO) {
+                throw first;
+            }
+            return CCJSqlParserUtil.parse(sql, parser -> parser.withSquareBracketQuotation(true));
         }
     }
 
@@ -41,11 +67,14 @@ public final class SqlAnalyzer {
 
         SqlOperation operation = operation(statement);
         Table target = writeTarget(statement);
-        String targetName = target == null ? null : normalizeQualifiedName(target.getFullyQualifiedName());
         Map<String, String> aliases = aliasMap(collector.tables);
+        String targetName = target == null ? null : aliases.getOrDefault(
+                target.getName().toUpperCase(Locale.ROOT),
+                normalizeQualifiedName(target.getFullyQualifiedName()));
         Set<String> allTables = collector.tables.stream()
-                .map(Table::getFullyQualifiedName)
-                .map(SqlAnalyzer::safeNormalizeQualifiedName)
+                .map(table -> aliases.getOrDefault(
+                        table.getName().toUpperCase(Locale.ROOT),
+                        safeNormalizeQualifiedName(table.getFullyQualifiedName())))
                 .filter(name -> !name.isBlank())
                 .collect(LinkedHashSet::new, Set::add, Set::addAll);
         if (targetName != null) {
@@ -64,7 +93,10 @@ public final class SqlAnalyzer {
                     .forEach(table -> tableAccesses.add(new SqlTableAccess(table, AccessMode.READ)));
         }
 
-        Set<String> writtenColumns = writtenColumns(statement);
+        Set<Column> writtenColumnNodes = writtenColumnNodes(statement);
+        Set<String> writtenColumns = writtenColumnNodes.stream()
+                .map(column -> normalizePart(column.getColumnName()))
+                .collect(LinkedHashSet::new, Set::add, Set::addAll);
         Set<SqlColumnAccess> columnAccesses = new LinkedHashSet<>();
         if (targetName != null) {
             writtenColumns.forEach(column ->
@@ -73,10 +105,10 @@ public final class SqlAnalyzer {
 
         List<String> ambiguous = new ArrayList<>();
         for (Column column : collector.columns) {
-            String name = normalizePart(column.getColumnName());
-            if (writtenColumns.contains(name) && isUnqualified(column)) {
+            if (writtenColumnNodes.contains(column)) {
                 continue;
             }
+            String name = normalizePart(column.getColumnName());
             String owner = resolveOwner(column, aliases, allTables);
             if (owner == null) {
                 ambiguous.add(column.getFullyQualifiedName());
@@ -126,14 +158,14 @@ public final class SqlAnalyzer {
         return null;
     }
 
-    private static Set<String> writtenColumns(Statement statement) {
-        Set<String> columns = new LinkedHashSet<>();
+    private static Set<Column> writtenColumnNodes(Statement statement) {
+        Set<Column> columns = Collections.newSetFromMap(new IdentityHashMap<>());
         if (statement instanceof Insert insert && insert.getColumns() != null) {
-            insert.getColumns().forEach(column -> columns.add(normalizePart(column.getColumnName())));
+            columns.addAll(insert.getColumns());
         } else if (statement instanceof Update update && update.getUpdateSets() != null) {
             for (UpdateSet updateSet : update.getUpdateSets()) {
                 if (updateSet.getColumns() != null) {
-                    updateSet.getColumns().forEach(column -> columns.add(normalizePart(column.getColumnName())));
+                    columns.addAll(updateSet.getColumns());
                 }
             }
         }
@@ -187,7 +219,7 @@ public final class SqlAnalyzer {
 
     private static final class StructureCollector extends TablesNamesFinder<Void> {
         private final Set<Table> tables = new LinkedHashSet<>();
-        private final Set<Column> columns = new LinkedHashSet<>();
+        private final List<Column> columns = new ArrayList<>();
 
         @Override
         public <S> Void visit(Table table, S context) {

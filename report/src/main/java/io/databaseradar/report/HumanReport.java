@@ -26,6 +26,8 @@ public final class HumanReport {
                 Low confidence edges: %d
                 Unknown findings: %d
                 Duration: %d ms
+                Symbol resolution: %d ms
+                SQL parsing: %d ms
                 Approximate peak heap: %s
                 Graph written to: %s
                 """.formatted(
@@ -34,7 +36,8 @@ public final class HumanReport {
                 summary.parsedSql(), summary.partialSql(), summary.databaseTables(),
                 summary.databaseColumns(), summary.highConfidenceEdges(),
                 summary.mediumConfidenceEdges(), summary.lowConfidenceEdges(),
-                summary.unknownFindings(), summary.durationMillis(), bytes(summary.approximatePeakHeapBytes()), output);
+                summary.unknownFindings(), summary.durationMillis(), summary.symbolResolutionMillis(),
+                summary.sqlParsingMillis(), bytes(summary.approximatePeakHeapBytes()), output);
     }
 
     public String accesses(String heading, List<GraphQueries.AccessFinding> findings) {
