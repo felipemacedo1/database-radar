@@ -1,0 +1,25 @@
+# Compativel com OpenAI Codex CLI 0.150.1.
+# Acesso total autorizado pelo mantenedor para operacoes Git e release.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model_reasoning_effort = "high"
+model_verbosity = "medium"
+web_search = "live"
+tool_output_token_limit = 24000
+project_doc_max_bytes = 32768
+
+[features]
+memories = true
+
+[memories]
+generate_memories = true
+use_memories = true
+disable_on_external_context = false
+min_rate_limit_remaining_percent = 10
+min_rollout_idle_hours = 1
+max_rollout_age_days = 90
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 4
+interrupt_message = true

@@ -1,0 +1,18 @@
+.idea/
+.vscode/
+*.iml
+*.class
+.DS_Store
+
+# Build output
+target/
+build/
+out/
+
+# Database Radar scan output
+.database-radar/
+
+# Local tooling
+.env
+.env.*
+!.env.example
